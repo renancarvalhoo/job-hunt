@@ -50,12 +50,17 @@ BOARDS = {
         re.compile(r"jobs\.ashbyhq\.com/([A-Za-z0-9._-]{2,40})"),
         "https://api.ashbyhq.com/posting-api/job-board/{}",
     ),
+    "workable": (
+        "apply.workable.com",
+        re.compile(r"apply\.workable\.com/([A-Za-z0-9._-]{2,40})"),
+        "https://apply.workable.com/api/v1/widget/accounts/{}",
+    ),
 }
 
 # Path segments that are not company slugs.
 JUNK = {"embed", "api", "jobs", "job", "board", "boards", "search", "www",
         "static", "assets", "images", "favicon", "robots", "sitemap", "null",
-        "undefined", "example", "test", "your-company", "company", "slug"}
+        "undefined", "example", "test", "your-company", "company", "slug", "j"}
 
 
 def gh_search(host, page):

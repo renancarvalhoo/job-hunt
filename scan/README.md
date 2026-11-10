@@ -4,7 +4,7 @@ Finds remote jobs that fit you, every day, and shows them on one page.
 
 ## What it does
 
-- Reads the public job boards (Ashby, Greenhouse, Lever) of about 900 companies.
+- Reads the public job boards (Ashby, Greenhouse, Lever, Workable) of about 1,400 companies.
 - Reads a seventh of the boards each day, so each board refreshes weekly.
 - Finds new boards through GitHub code search (`discover.py`, needs `gh` logged in).
 - Reads remote job feeds every day (`feeds.py`): Himalayas, jobs.rubyonrails.org, We Work Remotely and Get on Board.

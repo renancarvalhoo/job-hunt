@@ -96,7 +96,27 @@ def lever(slug):
                  posted=posted_date(j.get("createdAt")))
             for j in d]
 
-SOURCES = {"ashby": ashby, "greenhouse": greenhouse, "lever": lever}
+def workable_place(p):
+    return ", ".join(x for x in (p.get("city"), p.get("region"), p.get("country")) if x)
+
+
+def workable(slug):
+    d = get(f"https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true")
+    if d is None:
+        return None
+    jobs = {}
+    for j in d.get("jobs", []):
+        places = [workable_place(p) for p in (j.get("locations") or [j])]
+        job = jobs.setdefault(j["url"], dict(
+            title=j["title"], url=j["url"], places=[], country="",
+            remote=j.get("telecommuting"), body=strip(j.get("description")),
+            pay="", posted=posted_date(j.get("published_on"))))
+        job["places"] += [p for p in places if p and p not in job["places"]]
+    for job in jobs.values():
+        job["loc"] = " / ".join(job.pop("places"))
+    return list(jobs.values())
+
+SOURCES = {"ashby": ashby, "greenhouse": greenhouse, "lever": lever, "workable": workable}
 
 
 def remember(seen, store, job, src, company, today):
