@@ -38,7 +38,9 @@ cd "$SCAN_DIR" || exit 1
 # gives every board a weekly refresh, and a Google block costs the Google half only.
 "$PY" scan.py --slice >>"$STATE/board-slice.log" 2>>"$STATE/board-slice.err.log"
 
-AUTOMATION_PROMPT="Run the unattended daily job scan. Read and follow $SCAN_DIR/DAILY-AUTOMATION.md exactly. Use the connected Chrome session for Google and do all harvesting, validation, Python processing, and report verification yourself. Board discovery and the board rotation have already run, so do not run discover.py or scan.py. The wrapper opens the report after you exit, so do not open it. Finish with a concise summary of new viable jobs or state that there were none."
+"$PY" feeds.py >>"$STATE/feeds.log" 2>>"$STATE/feeds.err.log"
+
+AUTOMATION_PROMPT="Run the unattended daily job scan. Read and follow $SCAN_DIR/DAILY-AUTOMATION.md exactly. Use the connected Chrome session for Google and do all harvesting, validation, Python processing, and report verification yourself. Board discovery, the board rotation and the job feeds have already run, so do not run discover.py, scan.py or feeds.py. The wrapper opens the report after you exit, so do not open it. Finish with a concise summary of new viable jobs or state that there were none."
 
 if [ -z "$CLAUDE_BIN" ]; then
   echo "claude not found on PATH, skipping the Google step" >&2

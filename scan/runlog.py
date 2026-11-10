@@ -22,7 +22,7 @@ F = config.STATE / "runs.json"
 LOCK = F.with_name(".runs.lock")
 # "rejudge" re-runs the rules over cached text. It refreshes no search,
 # so the health banner ignores it, but it belongs in the history.
-KINDS = ("discovery", "boards", "google", "report", "rejudge")
+KINDS = ("discovery", "boards", "feeds", "google", "report", "rejudge")
 # 400 runs is over a year of daily scans of all three kinds.
 KEEP = 400
 

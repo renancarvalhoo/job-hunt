@@ -99,6 +99,27 @@ def lever(slug):
 SOURCES = {"ashby": ashby, "greenhouse": greenhouse, "lever": lever}
 
 
+def remember(seen, store, job, src, company, today):
+    t = job["title"]
+    job["country"] = job.get("country") or ""
+    bodies.put(store, job["url"], job)
+    _, hard, soft = judging.judge(job)
+    prev = seen.get(job["url"])
+    seen[job["url"]] = {"title": t, "company": company, "src": src,
+                        "loc": job.get("loc") or "",
+                        "home": bool(HOME.search(
+                            f'{t} {job["loc"]} {job["body"]}')),
+                        "date": (prev or {}).get("date") or today,
+                        "posted": job.get("posted") or (prev or {}).get("posted", ""),
+                        "last_seen": today,
+                        "blocked": hard, "check": soft,
+                        "pay": salary(job.get("pay", ""), job["body"])}
+    job["company"] = company
+    job["home"] = seen[job["url"]]["home"]
+    job["check"] = soft
+    return prev, hard
+
+
 def todays_slice(entries, day, parts=ROTATE_DAYS, never=()):
     """The boards due today, plus any board never read before.
 
@@ -233,33 +254,16 @@ def main():
         answered.add((src, slug))
         asked[f"{src}:{slug}"] = today
         for job in jobs:
-            t = job["title"]
             # The only things dropped are a posting that is not about your role at
             # all, and a board's own placeholder or template posting.
-            if not judging.keep(t):
+            if not judging.keep(job["title"]):
                 continue
-            job["country"] = job.get("country") or ""
-            bodies.put(store, job["url"], job)
-            _, hard, soft = judging.judge(job)
-            # Always re-judge: the rules change, so a stale verdict must not stick.
-            prev = seen.get(job["url"])
-            seen[job["url"]] = {"title": t, "company": slug, "src": src,
-                                "loc": job.get("loc") or "",
-                                "home": bool(HOME.search(
-                                    f'{t} {job["loc"]} {job["body"]}')),
-                                "date": (prev or {}).get("date") or today,
-                                "posted": job.get("posted") or (prev or {}).get("posted", ""),
-                                "last_seen": today,
-                                "blocked": hard, "check": soft,
-                                "pay": salary(job.get("pay", ""), job["body"])}
+            prev, hard = remember(seen, store, job, src, slug, today)
             if prev:
                 continue
             if hard:
                 blocked += 1
                 continue
-            job["company"] = slug
-            job["home"] = seen[job["url"]]["home"]
-            job["check"] = soft
             fresh.append(job)
 
     closed, reopened = close_missing(seen, answered, today)

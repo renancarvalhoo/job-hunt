@@ -7,6 +7,7 @@ Finds remote jobs that fit you, every day, and shows them on one page.
 - Reads the public job boards (Ashby, Greenhouse, Lever) of about 900 companies.
 - Reads a seventh of the boards each day, so each board refreshes weekly.
 - Finds new boards through GitHub code search (`discover.py`, needs `gh` logged in).
+- Reads remote job feeds every day (`feeds.py`): Himalayas, jobs.rubyonrails.org, We Work Remotely and Get on Board.
 - Searches Google for more job pages, through your Chrome, driven by Claude.
 - Sorts every job into lists: Clean, Worth a glance, One level down, Wrong kind of role, Wrong country.
 - Never deletes a job. It only moves it between lists.
@@ -41,6 +42,7 @@ Finds remote jobs that fit you, every day, and shows them on one page.
 | `python3 scan/scan.py` | Read every board (slow) |
 | `python3 scan/scan.py --board greenhouse:slug` | Read only one tracked board |
 | `python3 scan/discover.py` | Add new boards to `me/scan/companies.txt` |
+| `python3 scan/feeds.py` | Read the job feeds (`--feed himalayas` for one) |
 | `python3 scan/report.py` | Rebuild the report |
 | `python3 scan/serve.py` | Serve the report, so your marks save |
 | `python3 scan/rejudge.py --dry` | Show what a change to `me/search.py` moves |

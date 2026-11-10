@@ -10,6 +10,7 @@ No state, no report. rules.py owns the rules; this owns applying them.
 """
 import json, re, urllib.request
 
+import config
 import rules
 
 UA = {"User-Agent": "Mozilla/5.0"}
@@ -66,7 +67,7 @@ def judge(job):
         soft.append("no remote signal")
     # A posting that is not about your role at all is bucketed, never dropped:
     # you tag these yourself, and a silent deletion could lose a real job.
-    if not keep(t):
+    if not keep(t) or (config.BODY_GATE and not config.BODY_GATE.search(f"{t} {body}")):
         soft.append(rules.NOT_QA_REASON)
     if rules.TITLE_WEAK.search(t):
         soft.append(rules.WRONG_ROLE_REASON)

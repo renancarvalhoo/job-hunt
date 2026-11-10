@@ -898,3 +898,27 @@ greenhouse:project44
 greenhouse:tanium
 greenhouse:tegnainc
 greenhouse:wellist
+# --- Ruby companies hiring worldwide or in the Americas, from remoteintech/remote-jobs ---
+lever:envato-2
+lever:fly
+lever:kinsta
+lever:renofi
+lever:teamsnap
+greenhouse:acquia
+greenhouse:aestudio
+greenhouse:customerio
+greenhouse:generalassembly
+greenhouse:gohiring
+greenhouse:modernhealth
+greenhouse:trussworksinc
+greenhouse:upwork
+greenhouse:valimail
+ashby:ad-hoc
+ashby:betterup
+ashby:calibre
+ashby:glitch
+ashby:hubstaff
+ashby:litmus
+ashby:scribdinc
+ashby:searchapi
+ashby:stickermule

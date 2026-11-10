@@ -43,6 +43,7 @@ TARGET_TITLE = re.compile(S.TARGET_TITLE, re.I)
 ROLE_GATE = re.compile(S.ROLE_GATE, re.I)
 EXCLUDE_TITLES = re.compile(S.EXCLUDE_TITLES, re.I)
 LOWER_LEVEL = re.compile(S.LOWER_LEVEL, re.I)
+BODY_GATE = re.compile(S.BODY_GATE, re.I) if getattr(S, "BODY_GATE", "") else None
 # Places you can work from, plus the words that mean "anywhere".
 ANYWHERE = (r"worldwide|global|globally|anywhere|any country|any location|"
             r"international|multiple countries")

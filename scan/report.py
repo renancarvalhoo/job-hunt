@@ -39,6 +39,7 @@ OFF_TITLE = f"title is not a {config.TARGET_LABEL}"
 # loudest: a regenerated file must never read as a successful search.
 STALE_WARN, STALE_BAD = 2, 4
 BOARD_LOG = HERE / "boards-read.json"
+BOARD_SOURCES = {"ashby", "greenhouse", "lever"}
 # Every board should be read once a week. Two rotations without one means it
 # is failing quietly, because a board that never answers never gets a date.
 BOARD_STALE = 15
@@ -62,7 +63,8 @@ def health(today):
     items, worst = [], "ok"
     rank = {"ok": 0, "warn": 1, "bad": 2}
 
-    for kind, label in (("boards", "Direct board scan"), ("google", "Google scan")):
+    for kind, label in (("boards", "Direct board scan"), ("feeds", "Job feeds"),
+                        ("google", "Google scan")):
         ok_run = runlog.last(kind, ok_only=True, completed_only=True)
         any_run = runlog.last(kind, ok_only=False, completed_only=True)
         age = runlog.age_days(ok_run.get("when"), today)
@@ -99,6 +101,9 @@ def health(today):
             elif oldest is not None:
                 bits.append(f"every board read within {oldest} days")
             note = ", ".join(bits)
+        elif kind == "feeds" and ok_run.get("feeds_ok") is not None:
+            note = (f'{ok_run["feeds_ok"]} of '
+                    f'{ok_run["feeds_ok"] + ok_run.get("feeds_failed", 0)} feeds answered')
         elif kind == "google" and ok_run.get("read_ok") is not None:
             note = (f'{ok_run["read_ok"]} of {ok_run.get("urls_in", 0)} '
                     f'job pages could be read')
@@ -117,7 +122,7 @@ def health_html(today):
         f'<span class="hwhen">{html.escape(i["when"])}</span>'
         f'<span class="hnote">{html.escape(i["note"] or i["stamp"] or "")}</span></div>'
         for i in items)
-    words = {"ok": "Both scans are current",
+    words = {"ok": "Every scan is current",
              "warn": "One scan is falling behind",
              "bad": "This page is not backed by a fresh search"}
     return (f'<section class="health {worst}">'
@@ -166,7 +171,8 @@ def load():
                 # The board no longer lists it. That outranks every other
                 # verdict: a role you cannot apply to is not worth reviewing.
                 bucket="closed" if closed else bucket_of(hard, soft),
-                first_seen=v.get("date", ""), sources={"boards"},
+                first_seen=v.get("date", ""),
+                sources={"boards" if v.get("src", "ashby") in BOARD_SOURCES else "feeds"},
                 pay=v.get("pay", ""), posted=v.get("posted", ""),
                 loc=v.get("loc", ""), home=bool(v.get("home")),
                 moved_from=v.get("moved_from", ""), moved_on=v.get("moved_on", ""),
@@ -312,7 +318,7 @@ details[open] .chev{transform:rotate(90deg)}
 .mark.good{background:#276657;color:#d7fff2}.mark.bad{background:#713a3b;color:#ffe1dd}
 .dupe{background:#293139;color:#bdc7cd;margin-left:7px}.also{display:block;color:var(--faint);font-size:10px;margin-top:5px}
 .also a{color:#809dac;margin-right:7px;font-size:10px}.src{font-size:10px;white-space:nowrap;padding-top:1px}
-.tag.g{background:#203b51;color:#abd8ff}.tag.b{background:#493b22;color:#f0cc85}.tag.both{background:#3c3054;color:#d8c3ff}
+.tag.g{background:#203b51;color:#abd8ff}.tag.b{background:#493b22;color:#f0cc85}.tag.both{background:#3c3054;color:#d8c3ff}.tag.f{background:#1f4237;color:#9fe3c4}
 .health{display:grid;grid-template-columns:minmax(200px,.9fr) repeat(2,minmax(180px,1fr));gap:1px;
  margin:14px 0 0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--line)}
 .health>*{background:rgba(13,19,24,.92);padding:13px 16px}
@@ -480,8 +486,10 @@ def dupe_bits(r):
 
 
 def src_tag(s):
-    if s == {"boards", "google"}:
+    if len(s) > 1:
         return '<span class="tag both">both</span>'
+    if s == {"feeds"}:
+        return '<span class="tag f">feeds</span>'
     if s == {"google"}:
         return '<span class="tag g">google</span>'
     return '<span class="tag b">boards</span>'
@@ -567,7 +575,7 @@ def render(rows, today, sections=None, aside=True):
             attrs = (f' data-score="{points}" data-age="{age if age is not None else -1}"'
                      f' data-pay="{1 if r.get("pay") else 0}"'
                      f' data-home="{1 if (r.get("home") or rank.HOME.search(r.get("loc") or "")) else 0}"'
-                     f' data-src="{"both" if len(r["sources"]) == 2 else next(iter(r["sources"]))}"'
+                     f' data-src="{"both" if len(r["sources"]) > 1 else next(iter(r["sources"]))}"'
                      f' data-mark="{r.get("mark") or "none"}"')
             search = html.escape(" ".join([
                 r["company"], r["title"], " ".join(r["hard"] + r["soft"]),
@@ -611,7 +619,8 @@ def render(rows, today, sections=None, aside=True):
 
     n_g = len([r for r in rows if "google" in r["sources"]])
     n_b = len([r for r in rows if "boards" in r["sources"]])
-    n_both = len([r for r in rows if len(r["sources"]) == 2])
+    n_f = len([r for r in rows if "feeds" in r["sources"]])
+    n_both = len([r for r in rows if len(r["sources"]) > 1])
     n_new = len([r for r in rows if r["first_seen"] == today])
     n_viable = len([r for r in rows if r["bucket"] in {"clean", "check"}])
     shown = [r for r in rows if r["bucket"] in {k for k, _, _ in sections}]
@@ -828,6 +837,7 @@ if(live){
             f'<div class="stat"><span class="stat-value">{n_viable:,}</span><span class="stat-label">worth reviewing</span></div>'
             f'<div class="stat"><span class="stat-value">{n_both:,}</span><span class="stat-label">found by both</span></div>'
             f'<div class="source-line"><strong>{n_b:,}</strong> board results &nbsp;·&nbsp; '
+            f'<strong>{n_f:,}</strong> feed results &nbsp;·&nbsp; '
             f'<strong>{n_g:,}</strong> Google results &nbsp;·&nbsp; {other}</div></div></header>'
             + health_html(today) +
             f'<nav class="bar"><label class="search"><input id="job-filter" type="search" '
@@ -844,6 +854,7 @@ if(live){
             f'<button data-chip="mark" data-val="none">unreviewed</button>'
             f'<button data-chip="src" data-val="google">from Google</button>'
             f'<button data-chip="src" data-val="boards">from boards</button>'
+            f'<button data-chip="src" data-val="feeds">from feeds</button>'
             f'<span class="chipnote" id="chipnote"></span></nav>'
             f'<section class="results">{"".join(parts)}{jump}</section>'
             f'</main>{script}</body></html>')

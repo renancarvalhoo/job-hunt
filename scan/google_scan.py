@@ -179,6 +179,9 @@ def from_jsonld(page, url, slug):
             if not isinstance(d, dict) or d.get("@type") != "JobPosting":
                 continue
             locs = _place(d.get("jobLocation"))
+            needs = d.get("applicantLocationRequirements") or []
+            locs += [str(n["name"]) for n in (needs if isinstance(needs, list) else [needs])
+                     if isinstance(n, dict) and n.get("name")]
             if d.get("jobLocationType") == "TELECOMMUTE":
                 locs.insert(0, "Remote")
             pay = d.get("baseSalary") or {}

@@ -15,4 +15,4 @@ All state and output is in `me/scan/`.
 10. Summarize only new jobs in **Clean** or **Worth a glance**. If there are none, say so. Report any block or failed step.
 11. Do not open the report. The wrapper opens it after you exit.
 
-The wrapper already ran `discover.py` and `scan.py --slice`. Do not run them.
+The wrapper already ran `discover.py`, `scan.py --slice` and `feeds.py`. Do not run them.
