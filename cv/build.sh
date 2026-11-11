@@ -58,6 +58,31 @@ path = lambda f: os.path.join(cv.OUT_DIR, f)
 run = lambda *a: subprocess.run(list(a), capture_output=True, text=True).stdout
 text = {f: run("pdftotext", "-layout", path(f), "-").replace("\f", "\n") for f in pdfs}
 
+for f in sorted(os.listdir(cv.OUT_DIR)):
+    if f.endswith(".pdf") and f not in pdfs:
+        problems.append(f"stale pdf {f} is not produced by any cv-data file, delete it")
+
+import render
+from reportlab.platypus import KeepTogether, Paragraph
+from reportlab.lib.pagesizes import A4
+width = A4[0] - 2 * cv.MARGIN * cv.mm
+def paragraphs(flows):
+    for x in flows:
+        if isinstance(x, KeepTogether):
+            yield from paragraphs(x._content)
+        elif isinstance(x, Paragraph):
+            yield x
+short = {}
+for f in DATA:
+    for para in paragraphs(render.make_story(render.load(f))):
+        para.wrap(width, 1e6)
+        lines, room = para.blPara.lines, width - para.style.leftIndent - para.style.rightIndent
+        last = lines[-1]
+        extra = last.extraSpace if hasattr(last, "extraSpace") else last[0]
+        if len(lines) > 1 and room - extra < 0.2 * room:
+            words = re.sub(r"<[^>]+>", "", para.text).split()
+            short.setdefault(" ".join(words[-4:]), []).append(os.path.basename(f)[:-3])
+
 print("  CV                                          pages  fill   p2   dupes")
 for f in pdfs:
     p = int(re.search(r"Pages:\s+(\d+)", run("pdfinfo", path(f))).group(1))
@@ -65,11 +90,14 @@ for f in pdfs:
     fl = max(ys) / 814 * 100 if ys else 0
     w = re.findall(r"[a-z0-9%+/&-]+", re.sub(r"\s+", " ", text[f].lower()))
     d = [x for x, c in collections.Counter(" ".join(w[i:i+6]) for i in range(len(w) - 5)).items() if c > 1]
+    ys2 = [float(y) for y in re.findall(r'yMax="([0-9.]+)"', run("pdftotext", "-bbox", "-f", "2", "-l", "2", path(f), "-"))]
+    slack = (A4[1] - 12 * cv.mm - max([y for y in ys2 if y < A4[1] - 12 * cv.mm] or [0])) / cv.mm
     n2 = len([l for l in run("pdftotext", "-f", "2", "-l", "2", path(f), "-").split("\n") if l.strip()]) if p == 2 else 0
     flag = ""
     if p > 2: flag += " <- TOO LONG"; problems.append(f"{f}: {p} pages")
     elif p == 2 and n2 < 6: flag += " <- page 2 is a stub"
     if p == 1 and fl < 88: flag += " <- looks thin"
+    if p == 2 and slack < 15: flag += f" <- page 2 has {slack:.0f}mm left"
     if d: problems.append(f"{f}: {len(d)} repeated 6-word phrases")
     print(f"  {f[:-4]:<42} {p:>3}   {fl:>4.0f}%  {n2:>3}   {len(d):>4}{flag}")
     for x in d[:3]: print(f"        repeated: {x}")
@@ -77,6 +105,12 @@ for f in pdfs:
     for tool in cv.BANNED:
         if re.search(r"\b" + re.escape(tool.lower()) + r"\b", text[f].lower()):
             problems.append(f"{f}: banned tool {tool!r} is on the page")
+
+if short:
+    print()
+    print("  Short last lines (reword in the data to win a line back):")
+    for k, v in short.items():
+        print(f"    ...{k}  [{', '.join(sorted(set(v)))}]")
 
 print()
 print("  ALL GOOD" if not problems else "  PROBLEMS:\n    " + "\n    ".join(problems))

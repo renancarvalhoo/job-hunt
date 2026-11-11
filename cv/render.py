@@ -24,22 +24,32 @@ def load(path):
     return mod
 
 
-def render(d):
-    skills = [(head, cv.TOOLS if body == "TOOLS" else body) for head, body in d.SKILLS]
+def skill_rows(d):
+    return [(head, cv.TOOLS if body == "TOOLS" else body) for head, body in d.SKILLS]
+
+
+def make_story(d):
+    skills = skill_rows(d)
     bullets = cv.with_defaults(d.CURRENT, getattr(d, "OVERRIDES", None))
 
     story = []
     story += cv.header(d.ROLE, d.TAGLINE)
-    story += cv.sec("SUMMARY")
+    story += cv.sec(cv.LABELS["summary"])
     story += cv.summary(d.SUMMARY)
-    story += cv.sec("CORE SKILLS")
+    story += cv.highlights(getattr(d, "HIGHLIGHTS", cv.HIGHLIGHTS))
+    story += cv.sec(cv.LABELS["skills"])
     story += cv.skills(skills)
-    story += cv.sec("EXPERIENCE")
+    story += cv.sec(cv.LABELS["experience"])
     for i, job in enumerate(bullets):
         story += cv.job(i, job)
-    story += cv.speaking()
+    story += cv.projects()
     story += cv.education()
-    cv.build(d.OUT, d.TITLE, story)
+    return story
+
+
+def render(d):
+    keywords = ", ".join(v for _, v in skill_rows(d)[:2])
+    cv.build(d.OUT, d.TITLE, make_story(d), subject=d.ROLE, keywords=keywords)
 
 
 if __name__ == "__main__":
