@@ -52,3 +52,9 @@ HOME = re.compile(r"\b(" + S.HOME_PLACES + r")\b", re.I)
 HOME_OR_ANYWHERE = re.compile(
     r"\b(" + S.HOME_PLACES + "|" + ANYWHERE + r")\b", re.I)
 ISO_OK = {c.upper() for c in S.HOME_COUNTRY_CODES}
+SCOPED_REMOTE_IS_OUT = getattr(S, "SCOPED_REMOTE_IS_OUT", False)
+ANY_STACK_TITLE = (re.compile(S.ANY_STACK_TITLE, re.I)
+                   if getattr(S, "ANY_STACK_TITLE", "") else None)
+ANY_STACK_COMPANIES = (re.compile(
+    r"(?<![a-z0-9])(?:" + "|".join(re.escape(c) for c in S.ANY_STACK_COMPANIES)
+    + r")(?![a-z0-9])", re.I) if getattr(S, "ANY_STACK_COMPANIES", None) else None)

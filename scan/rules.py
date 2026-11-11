@@ -90,6 +90,9 @@ SCOPED_TO = re.compile(
     r"([A-Za-z][A-Za-z .&-]{2,28})", re.I)
 
 
+SAME_PLACE = re.compile(r"(?:this|that|the same)\s+(?:region|country|state|area)\b", re.I)
+
+
 def says_anywhere(text, limit=2000):
     """True only when an "anywhere" word has a hiring phrase next to it and
     is not immediately scoped to a place you cannot work from."""
@@ -100,6 +103,8 @@ def says_anywhere(text, limit=2000):
         scope = SCOPED_TO.match(text, m.end())
         if scope:
             place = scope.group(1).strip().rstrip(".,")
+            if SAME_PLACE.match(place):
+                continue
             if not GEO_OK.search(place) and (COUNTRY_RX.search(place)
                                              or PLACE_RX.search(place)):
                 continue
@@ -111,10 +116,11 @@ def says_anywhere(text, limit=2000):
 BARE_REMOTE = re.compile(r"^[\s,\-|/]*(fully\s+)?remote[\s,\-|/]*$", re.I)
 
 COUNTRIES = (
-    r"united states|usa|u\.s\.a?|us|america|canada|mexico|united kingdom|uk|"
+    r"united states|usa|u\.s\.?a?\.?|us|america|canada|mexico|united kingdom|uk|"
     r"england|scotland|wales|ireland|france|germany|deutschland|spain|portugal|"
     r"italy|netherlands|holland|belgium|luxembourg|switzerland|austria|poland|"
-    r"czechia|czech republic|slovakia|hungary|romania|bulgaria|greece|turkey|"
+    r"czechia|czech republic|slovakia|slovenia|hungary|romania|bulgaria|greece|"
+    r"turkey|t[uü]rkiye|"
     r"ukraine|serbia|croatia|denmark|sweden|norway|finland|iceland|estonia|"
     r"latvia|lithuania|india|pakistan|bangladesh|sri lanka|china|hong kong|"
     r"taiwan|japan|tokyo|korea|singapore|malaysia|indonesia|thailand|vietnam|"
@@ -154,8 +160,10 @@ CODE_RX = re.compile(r",\s*[A-Z]{2,3}\b|\(\s*[A-Z]{2,3}\s*\)")
 ISO_OK = config.ISO_OK
 
 BASED_IN = re.compile(
-    r"(?:based|located|residing|reside|living|hired|employed)\s+(?:in|within)\s+"
-    r"(?:the\s+)?([A-Za-z][A-Za-z .&-]{2,30})", re.I)
+    r"(?:(?:based|located|residing|reside|living|hired|employed)\s+(?:in|within)|"
+    r"as\s+long\s+as\s+(?:it\s+is|it's|you\s+are|you're|you\s+live)\s+in)\s+"
+    r"(?:the\s+)?([A-Za-z][A-Za-z .,&/-]{2,60})", re.I)
+CONDITIONAL = re.compile(r"\bif\s+(?:you\s+are|you're)\s+$", re.I)
 
 # A US pay disclosure names the US without restricting hiring to it.
 PAY_CONTEXT = re.compile(
@@ -166,7 +174,38 @@ PAY_CONTEXT = re.compile(
 # home country is not: it is somewhere you can work, a different question.
 REMOTE_LOC = re.compile(
     r"\b(worldwide|global|globally|anywhere|any country|any location|"
-    r"international|multiple countries)\b", re.I)
+    r"international|multiple countries|latam|latin america|south america|"
+    r"americas)\b", re.I)
+
+PLACEHOLDER_LOC = re.compile(
+    r"\s*(?:n/?a|tbd|multiple locations(?: available)?|various|distributed)\s*",
+    re.I)
+
+TITLE_PLACE = re.compile(
+    r"(?:\s[-\u2013\u2014|]\s|\()\s*((?:(?!\s[-\u2013\u2014|]\s)[^()])+?)\)?\s*$")
+
+
+def title_place(title):
+    m = TITLE_PLACE.search(title or "")
+    if not m:
+        return ""
+    place = m.group(1).strip()
+    if GEO_OK.search(place) or not (COUNTRY_RX.search(place)
+                                    or PLACE_RX.search(place)):
+        return ""
+    return place
+
+
+TIMEZONE_SCOPE = re.compile(r"\b(UTC|GMT)\b|time ?zones?", re.I)
+
+
+def scoped(where, body, hard, soft):
+    """A remote posting filed under places you cannot work from."""
+    if (config.SCOPED_REMOTE_IS_OUT and not TIMEZONE_SCOPE.search(where)
+            and not says_anywhere(body)):
+        return [f"location: {where}"[:90]], soft
+    soft.append(f"remote, but hiring is scoped to {where}"[:90])
+    return hard, soft
 
 
 def geo_verdict(loc, country, body, title="", remote=False):
@@ -176,6 +215,8 @@ def geo_verdict(loc, country, body, title="", remote=False):
     """
     hard, soft = [], []
     loc = (loc or "").strip()
+    if PLACEHOLDER_LOC.fullmatch(loc):
+        loc = ""
 
     # The board's own country code is authoritative and beats any wording.
     # A body that says "global" while the posting is filed under country FR is
@@ -186,6 +227,9 @@ def geo_verdict(loc, country, body, title="", remote=False):
     # A title that says it is open anywhere outranks the office address.
     if says_anywhere(title, 200):
         return hard, soft
+
+    if not loc or BARE_REMOTE.match(loc):
+        loc = title_place(title) or loc
 
     # An allowlist means an unrecognised location is a place you cannot work
     # from, not a doubt. Only a bare "Remote" or a GEO_OK word gets past.
@@ -201,15 +245,13 @@ def geo_verdict(loc, country, body, title="", remote=False):
         m = REMOTE_SCOPED.match(loc)
         if m:
             where = (m.group(1) or m.group(2) or "").strip()
-            soft.append(f"remote, but hiring is scoped to {where}"[:90])
-            return hard, soft
+            return scoped(where, body, hard, soft)
         # A remote role whose location names only a country is scoped by
         # policy. A named city or state is an address, and stays hard even
         # when the posting calls itself remote.
         if remote and COUNTRY_RX.search(loc) and not (
                 PLACE_RX.search(loc) or CODE_RX.search(loc)):
-            soft.append(f"remote, but hiring is scoped to {loc}"[:90])
-            return hard, soft
+            return scoped(loc, body, hard, soft)
         return [f"location: {loc}"], soft
 
     for m in BASED_IN.finditer(body or ""):
@@ -218,8 +260,10 @@ def geo_verdict(loc, country, body, title="", remote=False):
             continue
         if PAY_CONTEXT.search((body or "")[max(0, m.start() - 140):m.start()]):
             continue
+        if CONDITIONAL.search((body or "")[max(0, m.start() - 20):m.start()]):
+            continue
         if COUNTRY_RX.search(place):
-            return [f"body says based in {place}"], soft
+            return [f"body says based in {place}"[:90]], soft
     return hard, soft
 
 # HARD: legally or physically impossible. These are the only ones that drop a role.
@@ -232,13 +276,40 @@ STATE_LIST = re.compile(
     r"(?<![A-Za-z])(?:" + US_STATES + r")(?:\s*,\s*(?:" + US_STATES + r")){2,}"
     r"(?![A-Za-z])")
 
+STATE_LIST_EXEMPT = re.compile(
+    PAY_CONTEXT.pattern + r"|non-compete|does not apply|not eligible|do not hire",
+    re.I)
+
+
+def names_hiring_states(text):
+    for m in STATE_LIST.finditer(text):
+        if not STATE_LIST_EXEMPT.search(text[max(0, m.start() - 160):m.start()]):
+            return True
+    return False
+
+
 HARD = [
-    ("US persons only", re.compile(r"u\.?s\.?\s+persons?|citizens? or lawful permanent|green card holder", re.I)),
+    ("US persons only", re.compile(r"(?<![A-Za-z])u\.?s\.?\s+persons?\b|citizens? or lawful permanent|green card holder", re.I)),
     ("US work authorization", re.compile(r"authoriz(ed|ation) to work in the (united states|u\.?s)", re.I)),
-    ("security clearance", re.compile(r"security clearance|ITAR|critical infrastructure protection", re.I)),
-    ("US only", re.compile(r"\bUS[- ]only\b|\bU\.S\. only\b|must (be located|reside) in the (united states|us)\b", re.I)),
-    ("hiring only in named US states", STATE_LIST),
+    ("security clearance", re.compile(r"security clearance|\bITAR\b|critical infrastructure protection", re.I)),
+    ("US only", re.compile(
+        r"(?<!\()(?<!\( )\bUS[- ]only\b(?!\s*\))|\bU\.S\. only\b(?!\s*\))|"
+        r"must (be located|reside) in the (united states|us)\b|"
+        r"(only|exclusively) (hiring|accepting|considering)( candidates| applicants)? ?"
+        r"(in|from|based in|located in) (the )?(united states|u\.?s\.?a?|canada)\b|"
+        r"remote within the (united states|u\.s\.)", re.I)),
+    ("hybrid or in-office", re.compile(
+        r"#LI-(Hybrid|Onsite)\b|hybrid (work(ing)? )?model|"
+        r"\b(two|three|2|3)(\s*[-\u2013]\s*\d)?\s*(days?|times)\s*(per|a|/)\s*week\b[^.]{0,40}\boffice|"
+        r"in[- ]office (\d|two|three) days", re.I)),
 ]
+
+
+def hard_reasons(text):
+    found = [n for n, rx in HARD if rx.search(text)]
+    if names_hiring_states(text):
+        found.append("hiring only in named US states")
+    return found
 
 # SOFT: probably wrong, but cheap to check. These demote to "maybe", never drop.
 HYBRID = re.compile(r"\bhybrid\b|\bon[- ]site\b|days? (per|a) week in (the )?office", re.I)
@@ -252,10 +323,11 @@ REMOTE_BODY = re.compile(
     r"fully\s+remote|100%\s+remote|remote[- ]first|"
     r"remote\s+(?:position|role|job|opportunity|work)|"
     r"this\s+(?:role|position)\s+is\s+remote", re.I)
+LI_REMOTE = re.compile(r"#LI-Remote\b", re.I)
 
 def strip(h):
     """Plain text out of a board's HTML description."""
-    return html.unescape(re.sub(r"<[^>]+>", " ", h or ""))
+    return html.unescape(re.sub(r"<[^>]+>", " ", html.unescape(h or "")))
 
 
 # ---------------------------------------------------------------- pay

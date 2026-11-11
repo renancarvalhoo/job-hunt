@@ -97,7 +97,8 @@ def lever(slug):
             for j in d]
 
 def workable_place(p):
-    return ", ".join(x for x in (p.get("city"), p.get("region"), p.get("country")) if x)
+    return ", ".join(x for x in (p.get("city"), p.get("region") or p.get("state"),
+                                 p.get("country")) if x)
 
 
 def workable(slug):
@@ -106,7 +107,8 @@ def workable(slug):
         return None
     jobs = {}
     for j in d.get("jobs", []):
-        places = [workable_place(p) for p in (j.get("locations") or [j])]
+        places = [workable_place(p) for p in (j.get("locations") or [j])
+                  if not p.get("hidden")]
         job = jobs.setdefault(j["url"], dict(
             title=j["title"], url=j["url"], places=[], country="",
             remote=j.get("telecommuting"), body=strip(j.get("description")),
@@ -125,7 +127,8 @@ def remember(seen, store, job, src, company, today):
     bodies.put(store, job["url"], job)
     _, hard, soft = judging.judge(job)
     prev = seen.get(job["url"])
-    seen[job["url"]] = {"title": t, "company": company, "src": src,
+    seen[job["url"]] = {**({"closed": prev["closed"]} if prev and prev.get("closed") else {}),
+                        "title": t, "company": company, "src": src,
                         "loc": job.get("loc") or "",
                         "home": bool(HOME.search(
                             f'{t} {job["loc"]} {job["body"]}')),
@@ -180,8 +183,8 @@ def close_missing(seen, answered, today):
 
     Returns (closed now, reopened now).
     """
-    live_roles = {(v.get("company"), (v.get("title") or "").strip().lower())
-                  for v in seen.values() if v.get("last_seen") == today}
+    live_roles = {(v.get("company"), (v.get("title") or "").strip().lower()): url
+                  for url, v in seen.items() if v.get("last_seen") == today}
     closed, reopened = [], []
     for url, v in seen.items():
         # A row written before the source was stored falls back to the slug.
@@ -194,12 +197,12 @@ def close_missing(seen, answered, today):
             if v.pop("closed", None):
                 reopened.append(url)
             continue
-        # The same role listed again under a new URL is a move, not a closure.
-        if (v.get("company"), (v.get("title") or "").strip().lower()) in live_roles:
-            continue
         if not v.get("closed"):
             v["closed"] = today
             closed.append(url)
+            moved = live_roles.get((v.get("company"), (v.get("title") or "").strip().lower()))
+            if moved:
+                v["moved_to"] = moved
     return closed, reopened
 
 

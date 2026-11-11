@@ -31,7 +31,7 @@ GOOGLE = HERE / "google-seen.json"
 
 def rejudge_board(store, moves, dropped):
     if not BOARD.exists():
-        return 0, 0
+        return None, 0, 0
     seen = json.loads(BOARD.read_text())
     done = skipped = 0
     for url, v in list(seen.items()):
@@ -75,6 +75,8 @@ def rejudge_google(store, moves, dropped):
         row = store.get(r["url"])
         title = (row or {}).get("title") or r.get("title") or ""
         keep_rows.append(r)
+        if r.get("closed"):
+            continue
         if not judge.keep(title) and not row:
             r["bucket"], r["hard"], r["soft"] = "notqa", [], [judge.rules.NOT_QA_REASON]
             dropped.append((r["url"], title))

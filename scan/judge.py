@@ -52,11 +52,12 @@ def judge(job):
     body = job.get("body") or ""
     hay = f"{t} {loc} {body}"
 
-    hard = [n for n, rx in rules.HARD if rx.search(hay)]
+    hard = rules.hard_reasons(hay)
     remote_here = bool(job.get("remote")) or bool(
         rules.REMOTE.search(f"{t} {loc}")) or bool(
         rules.REMOTE_LOC.search(loc)) or bool(
-        rules.REMOTE_BODY.search(body[:1500]))
+        rules.REMOTE_BODY.search(body[:1500])) or bool(
+        rules.LI_REMOTE.search(body))
     soft = [n for n, rx in rules.SOFT if rx.search(hay) and not remote_here]
 
     ghard, gsoft = rules.geo_verdict(loc, job.get("country"), body, t,
@@ -67,7 +68,7 @@ def judge(job):
         soft.append("no remote signal")
     # A posting that is not about your role at all is bucketed, never dropped:
     # you tag these yourself, and a silent deletion could lose a real job.
-    if not keep(t) or (config.BODY_GATE and not config.BODY_GATE.search(f"{t} {body}")):
+    if not keep(t) or not stack_ok(job):
         soft.append(rules.NOT_QA_REASON)
     if rules.TITLE_WEAK.search(t):
         soft.append(rules.WRONG_ROLE_REASON)
@@ -75,6 +76,15 @@ def judge(job):
         soft.append(rules.LEVEL_REASON)
 
     return bucket_for(hard, soft), hard, soft
+
+
+def stack_ok(job):
+    t = job.get("title") or ""
+    return bool(not config.BODY_GATE
+                or config.BODY_GATE.search(f'{t} {job.get("body") or ""}')
+                or (config.ANY_STACK_TITLE and config.ANY_STACK_TITLE.search(t))
+                or (config.ANY_STACK_COMPANIES
+                    and config.ANY_STACK_COMPANIES.search(job.get("url") or "")))
 
 
 def keep(title):

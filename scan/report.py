@@ -39,7 +39,7 @@ OFF_TITLE = f"title is not a {config.TARGET_LABEL}"
 # loudest: a regenerated file must never read as a successful search.
 STALE_WARN, STALE_BAD = 2, 4
 BOARD_LOG = HERE / "boards-read.json"
-BOARD_SOURCES = {"ashby", "greenhouse", "lever"}
+BOARD_SOURCES = {"ashby", "greenhouse", "lever", "workable"}
 # Every board should be read once a week. Two rotations without one means it
 # is failing quietly, because a board that never answers never gets a date.
 BOARD_STALE = 15

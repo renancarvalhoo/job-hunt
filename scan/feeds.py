@@ -114,6 +114,13 @@ GETONBRD_REMOTE = {"fully_remote", "remote_local", "temporarily_remote"}
 GETONBRD_TEXT = ("description", "functions", "desirable", "benefits", "projects")
 
 
+def getonbrd_loc(countries, modality):
+    places = " / ".join(countries) or "Remote"
+    if modality in GETONBRD_REMOTE:
+        return places
+    return f'{places} ({modality.replace("_", " ").replace("no remote", "on-site")})'
+
+
 def getonbrd_job(j):
     a = j["attributes"]
     company = ((a.get("company") or {}).get("data") or {}).get("attributes") or {}
@@ -121,7 +128,7 @@ def getonbrd_job(j):
     pay = f'USD {a["min_salary"]}-{a["max_salary"]} monthly' if a.get("min_salary") else ""
     return dict(title=a["title"], url=j["links"]["public_url"],
                 company=company.get("name", ""),
-                loc=f'{" / ".join(a.get("countries") or [])} ({modality.replace("_", " ")})',
+                loc=getonbrd_loc(a.get("countries") or [], modality),
                 country="", remote=modality in GETONBRD_REMOTE,
                 body=" ".join(strip(a.get(k)) for k in GETONBRD_TEXT),
                 pay=pay, posted=epoch_day(a.get("published_at")))
@@ -147,9 +154,7 @@ GENERIC = {"wwr", "himalayas"}
 def wanted(name, job):
     if not judging.keep(job["title"]):
         return False
-    if name in GENERIC and config.BODY_GATE:
-        return bool(config.BODY_GATE.search(f'{job["title"]} {job["body"]}'))
-    return True
+    return name not in GENERIC or judging.stack_ok(job)
 
 
 def expire(seen, answered, today):

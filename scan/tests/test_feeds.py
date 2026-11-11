@@ -1,4 +1,3 @@
-import atexit
 import json
 import os
 import pathlib
@@ -7,29 +6,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-_test_root = tempfile.TemporaryDirectory(prefix="jobkit-feeds-")
-atexit.register(_test_root.cleanup)
-_me = pathlib.Path(_test_root.name) / "me"
-_me.mkdir()
-(_me / "search.py").write_text(
-    'NAME = ""\n'
-    'TIMEZONE = "UTC"\n'
-    'PORT = 8777\n'
-    'ROLE_NOUN = "role"\n'
-    'TARGET_LABEL = "target"\n'
-    'HOME_LABEL = "home"\n'
-    'ROLE_GATE = r".*"\n'
-    'TARGET_TITLE = r".*"\n'
-    'EXCLUDE_TITLES = r"(?!)"\n'
-    'LOWER_LEVEL = r"(?!)"\n'
-    'BODY_GATE = r"\\bruby\\b"\n'
-    'HOME_PLACES = r"Exampleland"\n'
-    'HOME_COUNTRY_CODES = ["ZZ"]\n'
-    'GOOGLE_QUERIES = []\n',
-    encoding="utf-8")
-os.environ["JOBKIT_ME"] = str(_me)
-os.environ["SCAN_DELAY"] = "0"
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import _env
 
 import feeds
 import report
@@ -104,7 +81,7 @@ class ParserTests(unittest.TestCase):
                            "max_salary": 4000, "published_at": 1794323638,
                            "company": {"data": {"attributes": {"name": "Acme"}}}}})
         self.assertEqual(job["company"], "Acme")
-        self.assertEqual(job["loc"], "Remote (fully remote)")
+        self.assertEqual(job["loc"], "Remote")
         self.assertTrue(job["remote"])
         self.assertEqual(job["pay"], "USD 3000-4000 monthly")
 
@@ -140,19 +117,20 @@ class ExpiryTests(unittest.TestCase):
 
 class ReportTests(unittest.TestCase):
     def test_feed_rows_are_tagged_as_feeds(self):
-        board = _me / "scan" / "board-seen.json"
+        board = _env.ME / "scan" / "board-seen.json"
         board.write_text(json.dumps({
             "https://x/1": {"src": "wwr", "company": "Acme", "title": "Dev"},
             "https://x/2": {"src": "lever", "company": "acme", "title": "Dev"},
-            "https://x/3": {"company": "old", "title": "Dev"}}))
+            "https://x/3": {"company": "old", "title": "Dev"},
+            "https://x/4": {"src": "workable", "company": "acme", "title": "Dev"}}))
         try:
             with mock.patch.object(report, "BOARD", board), \
-                 mock.patch.object(report, "GOOGLE", _me / "scan" / "none.json"):
+                 mock.patch.object(report, "GOOGLE", _env.ME / "scan" / "none.json"):
                 rows = {r["url"]: r["sources"] for r in report.load()}
         finally:
             board.unlink()
         self.assertEqual(rows, {"https://x/1": {"feeds"}, "https://x/2": {"boards"},
-                                "https://x/3": {"boards"}})
+                                "https://x/3": {"boards"}, "https://x/4": {"boards"}})
         self.assertIn("feeds", report.src_tag({"feeds"}))
         self.assertIn("both", report.src_tag({"feeds", "google"}))
 

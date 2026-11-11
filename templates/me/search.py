@@ -50,6 +50,11 @@ HOME_PLACES = r""
 # ISO country codes the boards may return, that you can work in.
 HOME_COUNTRY_CODES = []
 
+# "Remote - Canada" style postings scoped to a place outside HOME_PLACES.
+# False: Worth a glance, to ask if they hire contractors where you live.
+# True: Wrong country, unless the text says it hires in one of your places.
+SCOPED_REMOTE_IS_OUT = False
+
 # Google queries the daily agent runs. Each one is combined with the
 # site: filter for Lever, Greenhouse and Ashby (see scan/harvest-google.js).
 GOOGLE_QUERIES = []

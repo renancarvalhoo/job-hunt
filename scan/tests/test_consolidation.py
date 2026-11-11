@@ -1,5 +1,4 @@
 """Focused regressions for scanner persistence and partial-run handling."""
-import atexit
 import json
 import os
 import pathlib
@@ -10,27 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest import mock
 
 
-_test_root = tempfile.TemporaryDirectory(prefix="jobkit-tests-")
-atexit.register(_test_root.cleanup)
-_me = pathlib.Path(_test_root.name) / "me"
-_me.mkdir()
-(_me / "search.py").write_text(
-    'NAME = ""\n'
-    'TIMEZONE = "UTC"\n'
-    'PORT = 8777\n'
-    'ROLE_NOUN = "role"\n'
-    'TARGET_LABEL = "target"\n'
-    'HOME_LABEL = "home"\n'
-    'ROLE_GATE = r".*"\n'
-    'TARGET_TITLE = r".*"\n'
-    'EXCLUDE_TITLES = r"(?!)"\n'
-    'LOWER_LEVEL = r"(?!)"\n'
-    'HOME_PLACES = r"Exampleland"\n'
-    'HOME_COUNTRY_CODES = ["ZZ"]\n'
-    'GOOGLE_QUERIES = []\n',
-    encoding="utf-8")
-os.environ["JOBKIT_ME"] = str(_me)
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import _env
 
 import discover
 import google_scan

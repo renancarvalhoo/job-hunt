@@ -138,6 +138,11 @@ def board_is_live(url):
     return bool(jobs)
 
 
+def fresh_slugs(src, found, known):
+    return sorted({s.lower(): s for s in sorted(found)
+                   if f"{src}:{s}".lower() not in known}.values())
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--slugs", metavar="FILE",
@@ -167,7 +172,7 @@ def main():
         if not args.no_github:
             print(f"searching {host} (GitHub) ...", file=sys.stderr)
         found |= from_search.get(src, set())
-        new = [s for s in sorted(found) if f"{src}:{s}".lower() not in known]
+        new = fresh_slugs(src, found, known)
         print(f"  {len(found)} slugs, {len(new)} not in companies.txt",
               file=sys.stderr)
         for s in new:
@@ -186,7 +191,7 @@ def main():
     live = COMPANIES.read_text()
     have = {l.strip().lower() for l in live.splitlines()
             if ":" in l and not l.strip().startswith("#")}
-    added = [b for b in added if b.lower() not in have]
+    added = list({b.lower(): b for b in added if b.lower() not in have}.values())
     if not added:
         print("No new live boards: already added while this was running.")
         runlog.record("discovery", ok=search_ok, added=0,

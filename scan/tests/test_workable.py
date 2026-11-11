@@ -1,4 +1,3 @@
-import atexit
 import os
 import pathlib
 import sys
@@ -6,19 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-_test_root = tempfile.TemporaryDirectory(prefix="jobkit-workable-")
-atexit.register(_test_root.cleanup)
-_me = pathlib.Path(_test_root.name) / "me"
-_me.mkdir()
-(_me / "search.py").write_text(
-    'NAME = ""\nTIMEZONE = "UTC"\nPORT = 8777\nROLE_NOUN = "role"\n'
-    'TARGET_LABEL = "target"\nHOME_LABEL = "home"\nROLE_GATE = r".*"\n'
-    'TARGET_TITLE = r".*"\nEXCLUDE_TITLES = r"(?!)"\nLOWER_LEVEL = r"(?!)"\n'
-    'HOME_PLACES = r"Exampleland"\nHOME_COUNTRY_CODES = ["ZZ"]\nGOOGLE_QUERIES = []\n',
-    encoding="utf-8")
-os.environ["JOBKIT_ME"] = str(_me)
-os.environ["SCAN_DELAY"] = "0"
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import _env
 
 import discover
 import scan

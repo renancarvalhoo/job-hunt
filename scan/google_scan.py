@@ -156,12 +156,19 @@ def _place(node):
         if not isinstance(n, dict):
             continue
         a = n.get("address") or {}
-        bits = [a.get("addressLocality"), a.get("addressRegion"),
-                a.get("addressCountry")]
+        country = a.get("addressCountry")
+        if isinstance(country, dict):
+            country = country.get("name")
+        bits = [a.get("addressLocality"), a.get("addressRegion"), country]
         text = ", ".join(str(b) for b in bits if b)
         if text:
             out.append(text)
     return out
+
+
+def _types(node):
+    t = node.get("@type")
+    return t if isinstance(t, list) else [t]
 
 
 def from_jsonld(page, url, slug):
@@ -176,13 +183,17 @@ def from_jsonld(page, url, slug):
         except json.JSONDecodeError:
             continue
         for d in (d if isinstance(d, list) else [d]):
-            if not isinstance(d, dict) or d.get("@type") != "JobPosting":
+            if not isinstance(d, dict):
+                continue
+            d = next((n for n in d.get("@graph", [d]) if isinstance(n, dict)
+                      and "JobPosting" in _types(n)), None)
+            if not d:
                 continue
             locs = _place(d.get("jobLocation"))
             needs = d.get("applicantLocationRequirements") or []
             locs += [str(n["name"]) for n in (needs if isinstance(needs, list) else [needs])
                      if isinstance(n, dict) and n.get("name")]
-            if d.get("jobLocationType") == "TELECOMMUTE":
+            if "TELECOMMUTE" in str(d.get("jobLocationType")):
                 locs.insert(0, "Remote")
             pay = d.get("baseSalary") or {}
             val = pay.get("value") if isinstance(pay, dict) else {}
@@ -361,7 +372,7 @@ def main():
                           if state == "closed"
                           else ["the board API and the page both refused"]),
                     first_seen=first, posted=posted, pay="",
-                    closed=today if state == "closed" else ""))
+                    closed=(previous.get("closed") or today) if state == "closed" else ""))
                 continue
         bodies.put(store, url, job)
         bucket, hard, soft = judging.judge(job)
