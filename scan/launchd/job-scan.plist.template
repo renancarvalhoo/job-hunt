@@ -27,6 +27,8 @@
         <string>__PYTHON__</string>
         <key>CLAUDE_BIN</key>
         <string>__CLAUDE__</string>
+        <key>JOBKIT_ME</key>
+        <string>__ME__</string>
         <key>LANG</key>
         <string>en_US.UTF-8</string>
     </dict>

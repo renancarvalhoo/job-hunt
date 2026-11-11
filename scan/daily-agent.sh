@@ -7,6 +7,7 @@ set -u
 SCAN_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(dirname "$SCAN_DIR")"
 ME="${JOBKIT_ME:-$REPO/me}"
+export JOBKIT_ME="$ME"
 STATE="$ME/scan"
 REPORT="$STATE/report.html"
 CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude)}"
@@ -40,7 +41,7 @@ cd "$SCAN_DIR" || exit 1
 
 "$PY" feeds.py >>"$STATE/feeds.log" 2>>"$STATE/feeds.err.log"
 
-AUTOMATION_PROMPT="Run the unattended daily job scan. Read and follow $SCAN_DIR/DAILY-AUTOMATION.md exactly. Use the connected Chrome session for Google and do all harvesting, validation, Python processing, and report verification yourself. Board discovery, the board rotation and the job feeds have already run, so do not run discover.py, scan.py or feeds.py. The wrapper opens the report after you exit, so do not open it. Finish with a concise summary of new viable jobs or state that there were none."
+AUTOMATION_PROMPT="Run the unattended daily job scan. Read and follow $SCAN_DIR/DAILY-AUTOMATION.md exactly. The profile folder for this run is $ME: wherever the instructions say me/, use $ME instead. JOBKIT_ME is already exported, so the Python scripts read that folder. Use the connected Chrome session for Google and do all harvesting, validation, Python processing, and report verification yourself. Board discovery, the board rotation and the job feeds have already run, so do not run discover.py, scan.py or feeds.py. The wrapper opens the report after you exit, so do not open it. Finish with a concise summary of new viable jobs or state that there were none."
 
 if [ -z "$CLAUDE_BIN" ]; then
   echo "claude not found on PATH, skipping the Google step" >&2

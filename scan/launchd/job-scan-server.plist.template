@@ -22,6 +22,8 @@
         <string>__HOME__</string>
         <key>PATH</key>
         <string>__PATH__</string>
+        <key>JOBKIT_ME</key>
+        <string>__ME__</string>
         <key>LANG</key>
         <string>en_US.UTF-8</string>
     </dict>
