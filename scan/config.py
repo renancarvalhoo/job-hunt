@@ -38,6 +38,8 @@ ROLE_NOUN = S.ROLE_NOUN
 TARGET_LABEL = S.TARGET_LABEL
 HOME_LABEL = S.HOME_LABEL
 GOOGLE_QUERIES = S.GOOGLE_QUERIES
+FEEDS = list(getattr(S, "FEEDS", ["himalayas", "rubyonrails", "wwr", "getonbrd"]))
+FEED_SEARCHES = getattr(S, "FEED_SEARCHES", {})
 
 TARGET_TITLE = re.compile(S.TARGET_TITLE, re.I)
 ROLE_GATE = re.compile(S.ROLE_GATE, re.I)

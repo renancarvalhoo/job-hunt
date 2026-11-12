@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import argparse, datetime, json, os, sys, time, urllib.parse, urllib.request
+import argparse, datetime, json, os, re, sys, time
+import urllib.error, urllib.parse, urllib.request
 import xml.etree.ElementTree as ET
 
 import bodies
@@ -12,14 +13,21 @@ import storage
 
 from rules import strip
 
-UA = {"User-Agent": "Mozilla/5.0"}
+UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+      "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8"}
 DELAY = float(os.environ.get("SCAN_DELAY", "0.3"))
 GONE_DAYS = 30
 HIMALAYAS_PAGES = 20
+SLOW = float(os.environ.get("SCAN_SLOW_DELAY", "2"))
 
 
-def fetch(url):
-    time.sleep(DELAY)
+def throttled(e, out):
+    return isinstance(e, urllib.error.HTTPError) and e.code == 429 and bool(out)
+
+
+def fetch(url, pause=0):
+    time.sleep(max(DELAY, pause) if DELAY else 0)
     with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30) as r:
         return r.read()
 
@@ -53,16 +61,29 @@ def himalayas_job(j):
                 pay=pay, posted=epoch_day(j.get("pubDate")))
 
 
+def searches(name, default):
+    return config.FEED_SEARCHES.get(name, default)
+
+
 def himalayas():
-    out = []
-    query = urllib.parse.quote("ruby on rails")
-    for page in range(1, HIMALAYAS_PAGES + 1):
-        d = json.loads(fetch(f"https://himalayas.app/jobs/api/search?q={query}&page={page}"))
-        jobs = d.get("jobs") or []
-        out += [himalayas_job(j) for j in jobs]
-        if not jobs or len(out) >= d.get("totalCount", 0):
-            break
-    return out
+    out = {}
+    for term in searches("himalayas", ["ruby on rails"]):
+        query = urllib.parse.quote(term)
+        got = 0
+        for page in range(1, HIMALAYAS_PAGES + 1):
+            try:
+                d = json.loads(fetch(f"https://himalayas.app/jobs/api/search?q={query}&page={page}",
+                                     SLOW))
+            except urllib.error.HTTPError as e:
+                if throttled(e, out):
+                    return list(out.values())
+                raise
+            jobs = d.get("jobs") or []
+            got += len(jobs)
+            out.update((j["url"], j) for j in map(himalayas_job, jobs))
+            if not jobs or got >= d.get("totalCount", 0):
+                break
+    return list(out.values())
 
 
 def rubyonrails_job(item, page=""):
@@ -77,9 +98,9 @@ def rubyonrails_job(item, page=""):
     return job
 
 
-def job_page(url):
+def job_page(url, pause=0):
     try:
-        return fetch(url).decode("utf-8", "replace")
+        return fetch(url, pause).decode("utf-8", "replace")
     except Exception as e:
         print(f"  ! {url} -> {e}", file=sys.stderr)
         return ""
@@ -137,17 +158,224 @@ def getonbrd_job(j):
 def getonbrd():
     out = {}
     expand = urllib.parse.quote('["company"]')
-    for query in ("ruby", "rails"):
+    for query in searches("getonbrd", ["ruby", "rails"]):
         d = json.loads(fetch("https://www.getonbrd.com/api/v0/search/jobs"
-                             f"?query={query}&per_page=100&expand={expand}"))
+                             f"?query={urllib.parse.quote(query)}&per_page=100&expand={expand}"))
         for j in d.get("data") or []:
             job = getonbrd_job(j)
             out[job["url"]] = job
     return list(out.values())
 
 
+def text(h):
+    return re.sub(r"\s+", " ", strip(h)).strip()
+
+
+LINKEDIN_PAGES = 4
+LINKEDIN_CARD = re.compile(r'data-entity-urn="urn:li:jobPosting:(\d+)"(.*?)</li>', re.S)
+LINKEDIN_TITLE = re.compile(r'base-search-card__title">(.*?)</h3>', re.S)
+LINKEDIN_COMPANY = re.compile(r'base-search-card__subtitle">(.*?)</h4>', re.S)
+LINKEDIN_LOC = re.compile(r'job-search-card__location">(.*?)</span>', re.S)
+LINKEDIN_DATE = re.compile(r'datetime="(\d{4}-\d\d-\d\d)"')
+LINKEDIN_BODY = re.compile(r'show-more-less-html__markup[^>]*>(.*?)</div>', re.S)
+LINKEDIN_CRITERIA = re.compile(r'description__job-criteria-text[^>]*>(.*?)</span>', re.S)
+
+
+def first(pattern, raw):
+    m = pattern.search(raw)
+    return text(m.group(1)) if m else ""
+
+
+def in_place(loc, place):
+    if not place or place.lower() in loc.lower():
+        return loc
+    return f"{loc}, {place}" if loc else place
+
+
+def linkedin_cards(raw, place=""):
+    for job_id, card in LINKEDIN_CARD.findall(raw):
+        yield dict(title=first(LINKEDIN_TITLE, card),
+                   url=f"https://www.linkedin.com/jobs/view/{job_id}/",
+                   company=first(LINKEDIN_COMPANY, card),
+                   loc=in_place(first(LINKEDIN_LOC, card), place),
+                   country="", remote=None, body="", pay="",
+                   posted=first(LINKEDIN_DATE, card),
+                   page=f"https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{job_id}")
+
+
+def linkedin_detail(page, job):
+    criteria = " · ".join(text(c) for c in LINKEDIN_CRITERIA.findall(page))
+    body = first(LINKEDIN_BODY, page)
+    if body:
+        job["body"] = f"{body} {criteria}".strip()
+    return job
+
+
+def linkedin():
+    out = {}
+    for search in searches("linkedin", []):
+        params = {"f_TPR": "r604800", **search}
+        for start in range(0, 10 * LINKEDIN_PAGES, 10):
+            query = urllib.parse.urlencode({**params, "start": start})
+            try:
+                raw = fetch("https://www.linkedin.com/jobs-guest/jobs/api/"
+                            f"seeMoreJobPostings/search?{query}", SLOW).decode("utf-8", "replace")
+            except urllib.error.HTTPError as e:
+                if throttled(e, out):
+                    return list(out.values())
+                raise
+            cards = list(linkedin_cards(raw, search.get("location", "")))
+            out.update((c["url"], c) for c in cards)
+            if not cards:
+                break
+    return list(out.values())
+
+
+GUPY_PAGES = 5
+NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', re.S)
+GUPY_PLACE = {"remote": "Remote", "hybrid": "hybrid", "on-site": "on-site"}
+
+
+def gupy_job(j):
+    place = ", ".join(p for p in (j.get("city"), j.get("state")) if p) or "Brazil"
+    mode = j.get("workplaceType") or ""
+    loc = "Remote, Brazil" if mode == "remote" else f"{place}, Brazil ({GUPY_PLACE.get(mode, mode)})"
+    return dict(title=(j.get("name") or "").strip(), url=j["jobUrl"].split("?")[0],
+                company=j.get("careerPageName") or "", loc=loc, country="",
+                remote=mode == "remote", body=text(j.get("description")),
+                pay="", posted=(j.get("publishedDate") or "")[:10])
+
+
+def gupy_list(raw):
+    m = NEXT_DATA.search(raw)
+    found = json.loads(m.group(1))["props"]["pageProps"].get("initialJobList") if m else None
+    return found or {"data": [], "pagination": {}}
+
+
+def gupy():
+    out = {}
+    for term in searches("gupy", []):
+        for page in range(1, GUPY_PAGES + 1):
+            raw = fetch(f"https://portal.gupy.io/job-search/term={urllib.parse.quote(term)}"
+                        f"&page={page}").decode("utf-8", "replace")
+            found = gupy_list(raw)
+            out.update((j["url"], j) for j in map(gupy_job, found["data"]))
+            p = found.get("pagination") or {}
+            if not found["data"] or page * p.get("limit", 12) >= p.get("total", 0):
+                break
+    return list(out.values())
+
+
+MICHAELPAGE_PAGES = 3
+MP_TILE = re.compile(r'<div about="(/job-detail/[^"]+)" class="job-tile(.*?)class="job-links"', re.S)
+MP_TITLE = re.compile(r'<h3><a[^>]*>(.*?)</a>', re.S)
+MP_LOC = re.compile(r'class="job-location">(.*?)</div>', re.S)
+MP_KIND = re.compile(r'class="job-contract-type">(.*?)</div>', re.S)
+MP_SUMMARY = re.compile(r'class="job-summary">(.*?)<div class="bullet_points">', re.S)
+
+
+def michaelpage_tiles(raw, site):
+    for path, tile in MP_TILE.findall(raw):
+        kind = first(MP_KIND, tile)
+        yield dict(title=first(MP_TITLE, tile), url=f"https://www.{site}{path}",
+                   company="Michael Page client", loc=first(MP_LOC, tile), country="", remote=None,
+                   body=f"{first(MP_SUMMARY, tile)} {kind}".strip(), pay="", posted="",
+                   page=f"https://www.{site}{path}")
+
+
+def jsonld_detail(page, job):
+    found = google_scan.from_jsonld(page, job["url"], job["company"])
+    if found:
+        job.update(body=found["body"] or job["body"], loc=found["loc"] or job["loc"],
+                   pay=found["pay"] or job["pay"],
+                   posted=found["posted"] or job["posted"])
+    return job
+
+
+def michaelpage():
+    out = {}
+    for search in searches("michaelpage", []):
+        site, term = search["site"], search["search"]
+        for page in range(MICHAELPAGE_PAGES):
+            try:
+                raw = fetch(f"https://www.{site}/jobs/{urllib.parse.quote(term)}"
+                            f"?page={page}").decode("utf-8", "replace")
+            except urllib.error.HTTPError as e:
+                if page and e.code == 404:
+                    break
+                raise
+            tiles = list(michaelpage_tiles(raw, site))
+            new = [t for t in tiles if t["url"] not in out]
+            out.update((t["url"], t) for t in tiles)
+            if not new:
+                break
+    return list(out.values())
+
+
+RH_RESULTS = re.compile(r"initialResults = JSON\.parse\('(.*?)'\);", re.S)
+JS_ESCAPE = re.compile(r"\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)", re.S)
+JS_CHAR = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f"}
+
+
+def js_char(m):
+    code = m.group(1)
+    if code[0] in "xu" and len(code) > 1:
+        return chr(int(code[1:], 16))
+    return JS_CHAR.get(code, code)
+
+
+def js_string(s):
+    return JS_ESCAPE.sub(js_char, s)
+
+
+RH_MODE = {"Remote": "remote", "Hybrid": "hybrid", "On-site": "on-site"}
+
+
+def roberthalf_jobs(raw):
+    m = RH_RESULTS.search(raw)
+    if not m:
+        return []
+    return json.loads(js_string(m.group(1)), strict=False)["data"].get("jobs") or []
+
+
+def roberthalf_job(j):
+    mode = RH_MODE.get(j.get("remote"), j.get("remote") or "")
+    place = ", ".join(p for p in (j.get("city"), j.get("stateprovince"), "Brazil") if p)
+    pay = ""
+    if j.get("payrate_min") not in (None, "", "0"):
+        pay = f'{j.get("salary_currency", "")} {j["payrate_min"]}-{j.get("payrate_max", "")} {j.get("payrate_period", "")}'
+    return dict(title=j["jobtitle"], url=j["job_detail_url"],
+                company="Robert Half client",
+                loc=f"{place} ({mode})" if mode else place, country="",
+                remote=mode == "remote", body=text(j.get("description")),
+                pay=pay, posted=(j.get("date_posted") or "")[:10])
+
+
+def roberthalf():
+    out = {}
+    for slug in searches("roberthalf", []):
+        raw = fetch(f"https://www.roberthalf.com/br/pt/vagas/brazil/{slug}").decode("utf-8", "replace")
+        out.update((j["url"], j) for j in map(roberthalf_job, roberthalf_jobs(raw)))
+    return list(out.values())
+
+
+DETAIL = {"linkedin": linkedin_detail, "michaelpage": jsonld_detail}
+
+
+def enrich(name, job, store):
+    page = job.pop("page", "")
+    if not page:
+        return job
+    known = store.get(job["url"])
+    if known and known.get("body"):
+        return {**job, **{k: v for k, v in known.items() if v not in (None, "")}}
+    raw = job_page(page, SLOW)
+    return DETAIL[name](raw, job) if raw else job
+
+
 FEEDS = {"himalayas": himalayas, "rubyonrails": rubyonrails,
-         "wwr": wwr, "getonbrd": getonbrd}
+         "wwr": wwr, "getonbrd": getonbrd, "linkedin": linkedin, "gupy": gupy,
+         "michaelpage": michaelpage, "roberthalf": roberthalf}
 GENERIC = {"wwr", "himalayas"}
 
 
@@ -187,7 +415,7 @@ def main():
     fresh, answered, failed, blocked = [], set(), [], 0
     counts = {}
 
-    for name in args.feed or FEEDS:
+    for name in args.feed or config.FEEDS:
         try:
             jobs = FEEDS[name]()
         except Exception as e:
@@ -195,7 +423,7 @@ def main():
             failed.append(name)
             continue
         answered.add(name)
-        kept = [j for j in jobs if wanted(name, j)]
+        kept = [enrich(name, j, store) for j in jobs if wanted(name, j)]
         counts[name] = (len(jobs), len(kept))
         for job in kept:
             prev, hard = scan.remember(seen, store, job, name, job["company"], today)

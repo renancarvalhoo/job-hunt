@@ -58,3 +58,14 @@ SCOPED_REMOTE_IS_OUT = False
 # Google queries the daily agent runs. Each one is combined with the
 # site: filter for Lever, Greenhouse and Ashby (see scan/harvest-google.js).
 GOOGLE_QUERIES = []
+
+# Job feeds scan/feeds.py reads. Leave both out to keep the defaults
+# (himalayas, rubyonrails, wwr, getonbrd, with Ruby searches).
+# FEEDS picks the feeds. FEED_SEARCHES gives each feed its searches:
+#   "himalayas", "getonbrd", "gupy": plain search terms
+#   "linkedin": LinkedIn public search params, e.g. {"keywords": "...", "location": "Brazil"}
+#     add "f_WT": "2" for remote only
+#   "michaelpage": {"site": "michaelpage.com.br", "search": "supply-chain"}
+#   "roberthalf": the slug after roberthalf.com/br/pt/vagas/brazil/
+# FEEDS = ["linkedin", "gupy"]
+# FEED_SEARCHES = {"linkedin": [{"keywords": "", "location": ""}], "gupy": [""]}

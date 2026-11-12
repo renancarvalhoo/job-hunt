@@ -178,8 +178,11 @@ def from_jsonld(page, url, slug):
     API answers 404, so it is the only way to read those.
     """
     for block in LD_JSON.findall(page):
+        raw = block.strip()
+        if raw.startswith(("{&quot;", "[&quot;")):
+            raw = html.unescape(raw)
         try:
-            d = json.loads(block.strip())
+            d = json.loads(raw, strict=False)
         except json.JSONDecodeError:
             continue
         for d in (d if isinstance(d, list) else [d]):

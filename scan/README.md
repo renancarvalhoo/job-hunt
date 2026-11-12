@@ -7,7 +7,7 @@ Finds remote jobs that fit you, every day, and shows them on one page.
 - Reads the public job boards (Ashby, Greenhouse, Lever, Workable) of about 1,400 companies.
 - Reads a seventh of the boards each day, so each board refreshes weekly.
 - Finds new boards through GitHub code search (`discover.py`, needs `gh` logged in).
-- Reads remote job feeds every day (`feeds.py`): Himalayas, jobs.rubyonrails.org, We Work Remotely and Get on Board.
+- Reads job feeds every day (`feeds.py`): Himalayas, jobs.rubyonrails.org, We Work Remotely and Get on Board by default. LinkedIn (public search), Gupy, Michael Page and Robert Half are there too, switched on per profile with `FEEDS` and `FEED_SEARCHES` in `search.py`.
 - Searches Google for more job pages, through your Chrome, driven by Claude.
 - Sorts every job into lists: Clean, Worth a glance, One level down, Wrong kind of role, Wrong country.
 - Never deletes a job. It only moves it between lists.
